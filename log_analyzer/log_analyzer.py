@@ -6,6 +6,8 @@ import os
 import datetime
 import re
 import dataclasses
+import structlog
+logger = structlog.get_logger()
 
 
 config = {
@@ -27,6 +29,7 @@ def find_last_log(log_dir: str):
     last_log = None
     pattern = re.compile(r'nginx-access-ui.log-(\d{8})(\.gz)?$')
     for name in os.listdir(log_dir):
+        logger.info('Processing', name=name)
         m = re.match(pattern, name)
         if m:
             d = datetime.datetime.strptime(m.group(1), '%Y%m%d')
@@ -36,9 +39,35 @@ def find_last_log(log_dir: str):
     return last_log
 
 
+def try_logger():
+    # Препроцессор timestamper, добавляющий к каждому логу унифицированные  метки времени
+    timestamper = structlog.processors.TimeStamper(fmt="iso", utc=True)
+
+    # Препроцессоры Structlog
+    structlog_processors = [
+        structlog.stdlib.add_log_level,
+        structlog.processors.add_log_level,
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.StackInfoRenderer(),
+        structlog.dev.set_exc_info,
+        structlog.processors.dict_tracebacks,
+        timestamper,
+    ]
+    from structlog.processors import JSONRenderer
+    logger_factory = structlog.WriteLoggerFactory(file=open(f'analyzer.log', mode='wt', encoding='utf-8'))  # or structlog.PrintLoggerFactory()
+    structlog.configure(
+        processors=structlog_processors + [JSONRenderer()],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=logger_factory,
+        cache_logger_on_first_use=False,
+    )
+
+
 def main():
     log_file = find_last_log(config["LOG_DIR"])
     print(log_file)
+    try_logger()
 
 
 if __name__ == "__main__":
