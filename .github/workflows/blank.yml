@@ -24,11 +24,11 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.8
       - name: Run image # install poetry
         uses: abatilo/actions-poetry@v2.0.0
-      - name: Pylint # Run pylint static analysis
-        run: |
-          poetry run pylint tsgen      
+      - run: poetry add flake8 black
+      - run: poetry run flake8 ./log_analyzer
+      - run: poetry run ./log_analyzer --check --verbose --diff --color
