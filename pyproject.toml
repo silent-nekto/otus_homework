@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "log-analyzer"
+version = "0.1.0"
+description = "Script to analyze logs of nginx"
+authors = ["Sergei Maslov <s.maslov@bi.zone>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
