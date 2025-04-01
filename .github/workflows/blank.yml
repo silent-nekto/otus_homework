@@ -27,3 +27,8 @@ jobs:
       - uses: actions/setup-python@v2
         with:
           python-version: 3.8
+      - name: Run image # install poetry
+        uses: abatilo/actions-poetry@v2.0.0
+      - name: Pylint # Run pylint static analysis
+        run: |
+          poetry run pylint tsgen      
