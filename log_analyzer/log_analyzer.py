@@ -8,6 +8,7 @@ import re
 import statistics
 import sys
 from string import Template
+from typing import Callable, Iterable, Any
 
 import structlog
 
@@ -21,7 +22,7 @@ config = {"REPORT_SIZE": 1000, "REPORT_DIR": "./reports", "LOG_DIR": "./log"}
 class LastLog:
     full_path: str
     file_name: str
-    date: datetime
+    date: datetime.datetime
     extension: str
 
 
@@ -41,8 +42,7 @@ def find_last_log(log_dir: str):
 
 def init_logger(log_path: str):
     timestamper = structlog.processors.TimeStamper(fmt="iso", utc=True)
-
-    structlog_processors = [
+    structlog_processors: Iterable[Any] = [
         structlog.stdlib.add_log_level,
         structlog.processors.add_log_level,
         structlog.contextvars.merge_contextvars,
@@ -50,7 +50,9 @@ def init_logger(log_path: str):
         structlog.dev.set_exc_info,
         structlog.processors.dict_tracebacks,
         timestamper,
+        structlog.processors.JSONRenderer(),
     ]
+    logger_factory: Callable
     if log_path:
         logger_factory = structlog.WriteLoggerFactory(
             file=open(log_path, mode="wt", encoding="utf-8")
@@ -58,7 +60,7 @@ def init_logger(log_path: str):
     else:
         logger_factory = structlog.PrintLoggerFactory()
     structlog.configure(
-        processors=structlog_processors + [structlog.processors.JSONRenderer()],
+        processors=structlog_processors,
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
         logger_factory=logger_factory,
