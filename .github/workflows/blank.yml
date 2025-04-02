@@ -32,3 +32,4 @@ jobs:
       - run: poetry install --all-groups
       - run: poetry run flake8 ./log_analyzer --max-line-length=120
       - run: poetry run black ./log_analyzer --check --verbose --diff --color
+      - run: poetry run isort ./log_analyzer
