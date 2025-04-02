@@ -43,4 +43,5 @@ jobs:
           python-version: 3.13
       - name: Run image # install poetry
         uses: abatilo/actions-poetry@v4
+      - run: poetry install --all-groups
       - run: make test
