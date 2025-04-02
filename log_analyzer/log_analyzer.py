@@ -3,6 +3,8 @@ import os
 import datetime
 import re
 import dataclasses
+import sys
+
 import structlog
 import statistics
 import json
@@ -61,7 +63,8 @@ def init_logger(log_path: str):
     )
 
 
-def analyze_it(log: LastLog):
+def enum_log_records(log: LastLog):
+    # перечисление записей в логе (url и время обработки запроса)
     opener = open if not log.extension else gzip.open
     # pattern = re.compile(r'.+?\[.+?\]\s".+?\s(.+?)\s.*?([0-9.]+)$')
     pattern = re.compile(r'[^"]+"\w+\s(.+?)\s.*?([0-9.]+)$')
@@ -71,16 +74,17 @@ def analyze_it(log: LastLog):
             if m:
                 yield m.group(1), float(m.group(2))
             else:
-                logger.error(f'Incorrect log format: {line}')
+                logger.error('Incorrect log format', line=line)
 
 
-def get_statistic(reader):
+def get_statistic(records_enumerator):
+    # подсчет статистики по всем запросам из лога
     result = {
         'count': 0,
         'time_sum': 0,
         'urls': {}
     }
-    for url, time in reader:
+    for url, time in records_enumerator:
         result['count'] += 1
         result['time_sum'] += time
         if url in result['urls']:
@@ -93,14 +97,19 @@ def get_statistic(reader):
     return result
 
 
-def extract_json_table(stats, total_time, req_count):
+def extract_json_table(info, urls_count):
+    # получение json-таблицы для вставки в шаблон отчета
+    # разворачивание словаря в список кортежей с сортировкой по суммарному времени выполнения запроса
+    stats = sorted([(url, info['urls'][url]) for url in info['urls']], key=lambda d: d[1]['time_sum'], reverse=True)
+    stats = stats[:urls_count]
+
     result = []
     for url, stat in stats:
         result.append({
             'count': stat['count'],
-            'count_perc': (stat['count'] / req_count) * 100,
+            'count_perc': (stat['count'] / info['count']) * 100,
             'time_sum': stat['time_sum'],
-            'time_perc': (stat['time_sum'] / total_time) * 100,
+            'time_perc': (stat['time_sum'] / info['time_sum']) * 100,
             'time_avg': statistics.mean(stat['requests']),
             'time_max': max(stat['requests']),
             'time_med': statistics.median(stat['requests']),
@@ -109,18 +118,19 @@ def extract_json_table(stats, total_time, req_count):
     return result
 
 
-def create_report(path, template, table):
-    with open(template, mode='rt', encoding='utf-8') as f_in:
+def create_report(path, table):
+    with open(r"./template/report.html", mode='rt', encoding='utf-8') as f_in:
         t = Template(f_in.read())
     with open(path, mode='wt', encoding='utf-8') as f_out:
         f_out.write(t.safe_substitute({'table_json': json.dumps(table)}))
 
 
-def read_cfg(path):
+def update_cfg(path):
+    # обновление текущего конфига
     try:
         with open(path, mode='rt', encoding='utf-8') as f:
             new_cfg = json.load(f)
-    except Exception as e:
+    except Exception:
         raise ValueError(f"Failed to load config file {path}")
     config.update(new_cfg)
 
@@ -130,27 +140,28 @@ def main():
     parser.add_argument("--log", default="", help="Path to log file")
     parser.add_argument("--config", required=False)
     args = parser.parse_args()
-    init_logger(args.log)
     try:
-        read_cfg(args.config)
+        init_logger(args.log)
+        if args.config:
+            update_cfg(args.config)
 
         log_file = find_last_log(config["LOG_DIR"])
         if not log_file:
             logger.error("Last log was not found")
+            sys.exit(1)
         logger.info("Parse log", log=log_file.file_name)
-        stat = get_statistic(analyze_it(log_file))
-        s = sorted([(url, stat['urls'][url]) for url in stat['urls']], key=lambda d: d[1]['time_sum'], reverse=True)
-        stats = s[:config['REPORT_SIZE']]
-        table = extract_json_table(stats, stat['time_sum'], stat['count'])
+
+        full_info = get_statistic(enum_log_records(log_file))
+
+        table = extract_json_table(full_info, config['REPORT_SIZE'])
+
         create_report(
             os.path.join(config['REPORT_DIR'], f'report-{log_file.date.strftime("%Y.%m.%d")}.html'),
-            r'c:\work\python\otus\homework\log_analyzer\template\report.html',
             table
         )
-    except Exception as e:
+    except (Exception, KeyboardInterrupt) as e:
         logger.error(e, exc_info=True)
-        raise
-    # try_logger()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
