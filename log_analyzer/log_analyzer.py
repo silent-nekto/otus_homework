@@ -4,6 +4,10 @@ import datetime
 import re
 import dataclasses
 import structlog
+import statistics
+import json
+from string import Template
+import argparse
 logger = structlog.get_logger()
 
 
@@ -19,24 +23,22 @@ class LastLog:
 
 
 def find_last_log(log_dir: str):
+    # поиск самого свежего лога
     last_log = None
     pattern = re.compile(r"nginx-access-ui.log-(\d{8})(\.gz)?$")
     for name in os.listdir(log_dir):
-        logger.info('Processing', name=name)
+        logger.debug('Processing', name=name)
         m = re.match(pattern, name)
         if m:
             d = datetime.datetime.strptime(m.group(1), "%Y%m%d")
             if last_log is None or d > last_log.date:
                 last_log = LastLog(os.path.join(log_dir, name), name, d, m.group(2))
-                pass
     return last_log
 
 
-def try_logger():
-    # Препроцессор timestamper, добавляющий к каждому логу унифицированные  метки времени
+def init_logger(log_path: str):
     timestamper = structlog.processors.TimeStamper(fmt="iso", utc=True)
 
-    # Препроцессоры Structlog
     structlog_processors = [
         structlog.stdlib.add_log_level,
         structlog.processors.add_log_level,
@@ -46,10 +48,12 @@ def try_logger():
         structlog.processors.dict_tracebacks,
         timestamper,
     ]
-    from structlog.processors import JSONRenderer
-    logger_factory = structlog.WriteLoggerFactory(file=open(f'analyzer.log', mode='wt', encoding='utf-8'))  # or structlog.PrintLoggerFactory()
+    if log_path:
+        logger_factory = structlog.WriteLoggerFactory(file=open(f'analyzer.log', mode='wt', encoding='utf-8'))
+    else:
+        logger_factory = structlog.PrintLoggerFactory()
     structlog.configure(
-        processors=structlog_processors + [JSONRenderer()],
+        processors=structlog_processors + [structlog.processors.JSONRenderer()],
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
         logger_factory=logger_factory,
@@ -67,7 +71,7 @@ def analyze_it(log: LastLog):
             if m:
                 yield m.group(1), float(m.group(2))
             else:
-                print(f'Incorrect log format: {line}')
+                logger.error(f'Incorrect log format: {line}')
 
 
 def get_statistic(reader):
@@ -80,23 +84,72 @@ def get_statistic(reader):
         result['count'] += 1
         result['time_sum'] += time
         if url in result['urls']:
-            info = result[url]
+            info = result['urls'][url]
             info['requests'].append(time)
             info['time_sum'] += time
             info['count'] += 1
         else:
-            result[url] = {'requests': [time], 'count': 1, 'time_sum': time}
+            result['urls'][url] = {'requests': [time], 'count': 1, 'time_sum': time}
     return result
 
 
+def extract_json_table(stats, total_time, req_count):
+    result = []
+    for url, stat in stats:
+        result.append({
+            'count': stat['count'],
+            'count_perc': (stat['count'] / req_count) * 100,
+            'time_sum': stat['time_sum'],
+            'time_perc': (stat['time_sum'] / total_time) * 100,
+            'time_avg': statistics.mean(stat['requests']),
+            'time_max': max(stat['requests']),
+            'time_med': statistics.median(stat['requests']),
+            'url': url
+        })
+    return result
+
+
+def create_report(path, template, table):
+    with open(template, mode='rt', encoding='utf-8') as f_in:
+        t = Template(f_in.read())
+    with open(path, mode='wt', encoding='utf-8') as f_out:
+        f_out.write(t.safe_substitute({'table_json': json.dumps(table)}))
+
+
+def read_cfg(path):
+    try:
+        with open(path, mode='rt', encoding='utf-8') as f:
+            new_cfg = json.load(f)
+    except Exception as e:
+        raise ValueError(f"Failed to load config file {path}")
+    config.update(new_cfg)
+
+
 def main():
-    log_file = find_last_log(config["LOG_DIR"])
-    print(log_file)
-    stat = get_statistic(analyze_it(log_file))
-    print(stat['count'])
-    print(stat['time_sum'])
-    s = sorted([(url, stat['urls'][url]) for url in stat['urls']], key=lambda d: d[1]['time_sum'])
-    print(s[:10])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--log", default="", help="Path to log file")
+    parser.add_argument("--config", required=False)
+    args = parser.parse_args()
+    init_logger(args.log)
+    try:
+        read_cfg(args.config)
+
+        log_file = find_last_log(config["LOG_DIR"])
+        if not log_file:
+            logger.error("Last log was not found")
+        logger.info("Parse log", log=log_file.file_name)
+        stat = get_statistic(analyze_it(log_file))
+        s = sorted([(url, stat['urls'][url]) for url in stat['urls']], key=lambda d: d[1]['time_sum'], reverse=True)
+        stats = s[:config['REPORT_SIZE']]
+        table = extract_json_table(stats, stat['time_sum'], stat['count'])
+        create_report(
+            os.path.join(config['REPORT_DIR'], f'report-{log_file.date.strftime("%Y.%m.%d")}.html'),
+            r'c:\work\python\otus\homework\log_analyzer\template\report.html',
+            table
+        )
+    except Exception as e:
+        logger.error(e, exc_info=True)
+        raise
     # try_logger()
 
 
