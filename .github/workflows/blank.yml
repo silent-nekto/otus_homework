@@ -44,4 +44,4 @@ jobs:
       - name: Run image # install poetry
         uses: abatilo/actions-poetry@v4
       - run: poetry install --all-groups
-      - run: make test
+      - run: make pytest

@@ -4,5 +4,5 @@ lint:
 	poetry run isort ./log_analyzer
 	poetry run mypy ./log_analyzer
 
-test:
+pytest:
 	poetry run python -m pytest .\test -v
