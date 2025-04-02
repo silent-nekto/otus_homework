@@ -3,3 +3,6 @@ lint:
 	poetry run black ./log_analyzer --check --verbose --diff --color
 	poetry run isort ./log_analyzer
 	poetry run mypy ./log_analyzer
+
+test:
+	poetry run python -m pytest .\test -v
