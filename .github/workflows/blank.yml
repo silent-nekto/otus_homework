@@ -30,7 +30,4 @@ jobs:
       - name: Run image # install poetry
         uses: abatilo/actions-poetry@v4
       - run: poetry install --all-groups
-      - run: poetry run flake8 ./log_analyzer --max-line-length=120
-      - run: poetry run black ./log_analyzer --check --verbose --diff --color
-      - run: poetry run isort ./log_analyzer
-      - run: poetry run mypy ./log_analyzer
+      - run: make lint
