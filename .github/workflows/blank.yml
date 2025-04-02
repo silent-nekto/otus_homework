@@ -29,6 +29,6 @@ jobs:
           python-version: 3.13
       - name: Run image # install poetry
         uses: abatilo/actions-poetry@v4
-      - run: poetry install --dev-dependency
+      - run: poetry install --all-groups
       - run: poetry run flake8 ./log_analyzer --max-line-length=120
       - run: poetry run black ./log_analyzer --check --verbose --diff --color
