@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Script to analyze logs of nginx"
 authors = ["Sergei Maslov <s.maslov@bi.zone>"]
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.9"
