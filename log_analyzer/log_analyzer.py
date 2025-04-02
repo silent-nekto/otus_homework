@@ -1,3 +1,4 @@
+import gzip
 import os
 import datetime
 import re
@@ -56,10 +57,47 @@ def try_logger():
     )
 
 
+def analyze_it(log: LastLog):
+    opener = open if not log.extension else gzip.open
+    # pattern = re.compile(r'.+?\[.+?\]\s".+?\s(.+?)\s.*?([0-9.]+)$')
+    pattern = re.compile(r'[^"]+"\w+\s(.+?)\s.*?([0-9.]+)$')
+    with opener(log.full_path, mode='rt', encoding='utf-8') as f:
+        for line in f:
+            m = re.match(pattern, line)
+            if m:
+                yield m.group(1), float(m.group(2))
+            else:
+                print(f'Incorrect log format: {line}')
+
+
+def get_statistic(reader):
+    result = {
+        'count': 0,
+        'time_sum': 0,
+        'urls': {}
+    }
+    for url, time in reader:
+        result['count'] += 1
+        result['time_sum'] += time
+        if url in result['urls']:
+            info = result[url]
+            info['requests'].append(time)
+            info['time_sum'] += time
+            info['count'] += 1
+        else:
+            result[url] = {'requests': [time], 'count': 1, 'time_sum': time}
+    return result
+
+
 def main():
     log_file = find_last_log(config["LOG_DIR"])
     print(log_file)
-    try_logger()
+    stat = get_statistic(analyze_it(log_file))
+    print(stat['count'])
+    print(stat['time_sum'])
+    s = sorted([(url, stat['urls'][url]) for url in stat['urls']], key=lambda d: d[1]['time_sum'])
+    print(s[:10])
+    # try_logger()
 
 
 if __name__ == "__main__":
