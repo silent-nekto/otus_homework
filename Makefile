@@ -5,4 +5,4 @@ lint:
 	poetry run mypy ./log_analyzer
 
 pytest:
-	poetry run python -m pytest .\test -v
+	poetry run python -m pytest ./test -v
