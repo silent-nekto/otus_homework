@@ -9,8 +9,9 @@ import sys
 from string import Template
 from typing import Callable, Iterable, Any
 from pathlib import Path
-
+import shutil
 import structlog
+
 
 logger = structlog.get_logger()
 
@@ -137,6 +138,10 @@ def create_report(path, table):
         t = Template(f_in.read())
     with open(path, mode="wt", encoding="utf-8") as f_out:
         f_out.write(t.safe_substitute({"table_json": json.dumps(table)}))
+    if not (path.parent / "jquery.tablesorter.js").exists():
+        shutil.copy(
+            "./template/jquery.tablesorter.js", path.parent / "jquery.tablesorter.js"
+        )
 
 
 def update_cfg(path):
