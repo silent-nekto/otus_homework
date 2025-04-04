@@ -21,7 +21,7 @@ config = {"REPORT_SIZE": 1000, "REPORT_DIR": "./reports", "LOG_DIR": "./log"}
 
 @dataclasses.dataclass
 class LastLog:
-    full_path: str
+    full_path: Path
     file_name: str
     date: datetime.datetime
     extension: str
