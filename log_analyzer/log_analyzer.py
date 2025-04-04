@@ -3,12 +3,12 @@ import dataclasses
 import datetime
 import gzip
 import json
-import os
 import re
 import statistics
 import sys
 from string import Template
 from typing import Callable, Iterable, Any
+from pathlib import Path
 
 import structlog
 
@@ -29,14 +29,21 @@ class LastLog:
 def find_last_log(log_dir: str):
     # поиск самого свежего лога
     last_log = None
+
     pattern = re.compile(r"nginx-access-ui.log-(\d{8})(\.gz)?$")
-    for name in os.listdir(log_dir):
-        logger.debug("Processing", name=name)
-        m = re.match(pattern, name)
-        if m:
-            d = datetime.datetime.strptime(m.group(1), "%Y%m%d")
-            if last_log is None or d > last_log.date:
-                last_log = LastLog(os.path.join(log_dir, name), name, d, m.group(2))
+    for item in Path(log_dir).iterdir():
+        if item.is_file():
+            file_name = item.name
+            logger.debug("Processing", name=file_name)
+            m = re.match(pattern, item.name)
+            if m:
+                try:
+                    d = datetime.datetime.strptime(m.group(1), "%Y%m%d")
+                except ValueError:
+                    logger.info("Incorrect date in name of log", date=m.group(1))
+                    continue
+                if last_log is None or d > last_log.date:
+                    last_log = LastLog(item.absolute(), item.name, d, m.group(2))
     return last_log
 
 
@@ -79,7 +86,7 @@ def enum_log_records(log: LastLog):
             if m:
                 yield m.group(1), float(m.group(2))
             else:
-                logger.error("Incorrect log format", line=line)
+                logger.error("Incorrect format of log record", line=line)
 
 
 def get_statistic(records_enumerator):
@@ -163,10 +170,8 @@ def main():
         table = extract_json_table(full_info, config["REPORT_SIZE"])
 
         create_report(
-            os.path.join(
-                config["REPORT_DIR"],
-                f'report-{log_file.date.strftime("%Y.%m.%d")}.html',
-            ),
+            Path(config["REPORT_DIR"])
+            / f'report-{log_file.date.strftime("%Y.%m.%d")}.html',
             table,
         )
     except (Exception, KeyboardInterrupt) as e:
