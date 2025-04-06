@@ -169,14 +169,20 @@ def main():
             logger.error("Last log was not found")
             sys.exit(1)
         logger.info("Parse log", log=log_file.file_name)
+        report_path = (
+            Path(config["REPORT_DIR"])
+            / f'report-{log_file.date.strftime("%Y.%m.%d")}.html'
+        )
+        if report_path.is_file():
+            logger.info("Report already exists")
+            sys.exit(0)
 
         full_info = get_statistic(enum_log_records(log_file))
 
         table = extract_json_table(full_info, config["REPORT_SIZE"])
 
         create_report(
-            Path(config["REPORT_DIR"])
-            / f'report-{log_file.date.strftime("%Y.%m.%d")}.html',
+            report_path,
             table,
         )
     except (Exception, KeyboardInterrupt) as e:
